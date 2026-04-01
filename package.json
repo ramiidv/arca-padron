@@ -1,0 +1,61 @@
+{
+  "name": "@ramiidv/arca-padron",
+  "version": "0.1.0",
+  "description": "TypeScript SDK para los web services de Padrón de ARCA (ex AFIP) - Alcances A4, A10 y A100",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "llms.txt",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "arca",
+    "afip",
+    "padron",
+    "argentina",
+    "sdk",
+    "typescript",
+    "contribuyentes"
+  ],
+  "author": "ramiidv",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramiidv/arca-padron-sdk.git"
+  },
+  "homepage": "https://github.com/ramiidv/arca-padron-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/ramiidv/arca-padron-sdk/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ramiidv/arca-common": "^0.1.0",
+    "fast-xml-parser": "^5.0.0",
+    "node-forge": "^1.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/node-forge": "^1.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}

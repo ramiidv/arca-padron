@@ -1,0 +1,162 @@
+# @ramiidv/arca-padron-sdk
+
+> TypeScript SDK para los web services de Padron de ARCA (ex AFIP) - Alcances A4, A10 y A100
+
+## Instalacion
+
+```bash
+npm install @ramiidv/arca-padron-sdk
+```
+
+Requisitos: Node.js >= 18 (fetch nativo). ESM only.
+
+## Configuracion
+
+```typescript
+import { ArcaPadron } from '@ramiidv/arca-padron-sdk';
+
+const padron = new ArcaPadron({
+  cert: string,          // PEM X.509 certificate
+  key: string,           // PEM RSA private key
+  cuit: string,          // CUIT representada (ej: "20123456789")
+  production?: boolean,  // default: false (homologacion)
+  retries?: number,      // default: 1
+  retryDelayMs?: number, // default: 1000
+  onEvent?: (event: ArcaPadronEvent) => void,
+});
+```
+
+## Metodos principales
+
+### getPersona(cuit: string): Promise<PersonaA4>
+Datos completos del contribuyente via ws_sr_padron_a4. Incluye: domicilios, impuestos, actividades, regimenes, relaciones, categorias, emails, telefonos.
+
+### getPersonaBasic(cuit: string): Promise<PersonaA10>
+Datos basicos del contribuyente via ws_sr_padron_a10. Incluye: datos generales y domicilios.
+
+### getParametros(collection: string): Promise<ParameterRecord[]>
+Tablas de parametros via ws_sr_padron_a100. Usa el enum CollectionName con valores SUPA.* prefijados. Colecciones: PROVINCIA (SUPA.E_PROVINCIA), TIPO_DOCUMENTO (SUPA.TIPO_DOCUMENTO), TIPO_DOMICILIO (SUPA.TIPO_DOMICILIO), TIPO_CLAVE (SUPA.TIPO_CLAVE_IDENTIFICACION), TIPO_EMPRESA_JURIDICA, TIPO_EMPRESA_JURIDICA_SUBGRUPO, TIPO_RELACION, TIPO_SUBTIPO_RELACION, TIPO_COMPONENTE_SOCIEDAD, TIPO_RELACION_COMPONENTE_SOC, TIPO_EMAIL, TIPO_TELEFONO, TIPO_RESIDENCIA, TIPO_DATO_ADICIONAL_DOMICILIO, ORGANISMO_INFORMANTE, ORGANISMO_CONTROL, PROVINCIA_SOCIEDAD_ORG, SEXO, CALLE, LOCALIDAD.
+
+### status(): Promise<{ a4: ServerStatus, a10: ServerStatus, a100: ServerStatus }>
+Health check de los tres servicios. No requiere autenticacion.
+
+## Tipos principales
+
+```typescript
+interface PersonaA4 {
+  idPersona: string;
+  tipoPersona: 'FISICA' | 'JURIDICA';
+  tipoClave?: string;
+  estadoClave?: string;
+  apellido?: string;
+  nombre?: string;
+  razonSocial?: string;
+  numeroDocumento?: string;
+  tipoDocumento?: string;
+  fechaNacimiento?: string;
+  sexo?: string;
+  numeroInscripcion?: string;
+  formaJuridica?: string;
+  mesCierre?: number;
+  fechaInscripcion?: string;
+  fechaContratoSocial?: string;
+  fechaFallecimiento?: string;
+  fechaJubilado?: string;
+  fechaVencimientoMigracion?: string;
+  localidadInscripcion?: string;
+  provinciaInscripcion?: string;
+  organismoInscripcion?: string;
+  organismoOriginante?: string;
+  tipoOrganismoOriginante?: string;
+  tipoResidencia?: string;
+  porcentajeCapitalNacional?: number;
+  cantidadSociosEmpresaMono?: number;
+  leyJubilacion?: number;
+  dependencia?: DependenciaA4;
+  claveInactivaAsociada?: string[];
+  domicilio?: DomicilioA4[];
+  impuesto?: ImpuestoA4[];
+  actividad?: ActividadA4[];
+  regimen?: RegimenA4[];
+  relacion?: RelacionA4[];
+  categoria?: CategoriaA4[];
+  email?: EmailA4[];
+  telefono?: TelefonoA4[];
+}
+
+interface PersonaA10 {
+  idPersona: string;
+  tipoPersona: 'FISICA' | 'JURIDICA';
+  tipoClave?: string;
+  estadoClave?: string;
+  nombre?: string;
+  apellido?: string;
+  razonSocial?: string;
+  numeroDocumento?: string;
+  tipoDocumento?: string;
+  idActividadPrincipal?: string;
+  descripcionActividadPrincipal?: string;
+  dependencia?: DependenciaA10;
+  claveInactivaAsociada?: string[];
+  domicilio?: DomicilioA10[];
+}
+
+interface ParameterRecord {
+  id: string;
+  descripcion: string;
+  atributos?: ParameterAttribute[];
+}
+
+interface ParameterAttribute {
+  name: string;
+  value: string;
+}
+
+interface ServerStatus {
+  appserver: string;
+  dbserver: string;
+  authserver: string;
+}
+```
+
+## Errores
+
+4-class hierarchy:
+- ArcaPadronError: base class
+- ArcaAuthError: WSAA authentication failures
+- ArcaPadronServiceError: business errors from ARCA (has errors: {code: number, msg: string}[])
+- ArcaSoapError: HTTP/transport errors (has statusCode?: number)
+
+```typescript
+import { ArcaAuthError, ArcaPadronServiceError, ArcaSoapError } from '@ramiidv/arca-padron-sdk';
+
+try {
+  await padron.getPersona(cuit);
+} catch (error) {
+  if (error instanceof ArcaAuthError) { /* auth failure */ }
+  if (error instanceof ArcaPadronServiceError) { /* business error, check error.errors */ }
+  if (error instanceof ArcaSoapError) { /* HTTP/network error, check error.statusCode */ }
+}
+```
+
+## Eventos
+
+Discriminated union types: auth:login, auth:cache-hit, request:start, request:end, request:retry, request:error.
+
+## Enums
+
+- Provincia (0-24, Argentine provinces)
+- TipoDomicilio (FISCAL, LEGAL, REAL)
+- TipoPersona (FISICA, JURIDICA)
+- ImpuestoId (IVA_RESPONSABLE_INSCRIPTO=30, IVA_EXENTO=32, MONOTRIBUTO=20, EMPLEADOR=301, GANANCIAS_PH=11, GANANCIAS_PJ=10, BIENES_PERSONALES=31)
+- CollectionName (PROVINCIA, TIPO_DOCUMENTO, TIPO_DOMICILIO, TIPO_CLAVE, TIPO_EMPRESA_JURIDICA, TIPO_EMPRESA_JURIDICA_SUBGRUPO, TIPO_RELACION, TIPO_SUBTIPO_RELACION, TIPO_COMPONENTE_SOCIEDAD, TIPO_RELACION_COMPONENTE_SOC, TIPO_EMAIL, TIPO_TELEFONO, TIPO_RESIDENCIA, TIPO_DATO_ADICIONAL_DOMICILIO, ORGANISMO_INFORMANTE, ORGANISMO_CONTROL, PROVINCIA_SOCIEDAD_ORG, SEXO, CALLE, LOCALIDAD)
+
+## Clientes de bajo nivel
+
+Accesibles como propiedades publicas: padron.wsaa, padron.a4, padron.a10, padron.a100.
+
+## Utilidades exportadas
+
+- ensureArray<T>(value): T[] - normaliza single/array SOAP responses
+- parseXml(xml): Record<string, unknown> - parse XML with CUIT-safe options
+- buildXml(obj): string - build XML from object
