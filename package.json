@@ -40,7 +40,7 @@
     "type": "git",
     "url": "git+https://github.com/ramiidv/arca-padron-sdk.git"
   },
-  "homepage": "https://github.com/ramiidv/arca-padron-sdk#readme",
+  "homepage": "https://arca-sdk.dev/padron",
   "bugs": {
     "url": "https://github.com/ramiidv/arca-padron-sdk/issues"
   },
