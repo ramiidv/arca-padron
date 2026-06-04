@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-padron",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript SDK para los web services de Padrón de ARCA (ex AFIP) - Alcances A4, A10 y A100",
   "type": "module",
   "main": "dist/index.js",
