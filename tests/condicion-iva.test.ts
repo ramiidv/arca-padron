@@ -72,6 +72,13 @@ describe('condicionIvaDesdePadron (constancia de inscripción)', () => {
     );
   });
 
+  it('impuesto 30 con estado EX o NA', () => {
+    expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', 'EX')] })).condicionIva).toBe(CondicionIva.EXENTO);
+    expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', 'NA')] })).condicionIva).toBe(
+      CondicionIva.IVA_NO_ALCANZADO,
+    );
+  });
+
   it('impuestos dados de baja no cuentan', () => {
     const r = condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', 'BD')] }));
     expect(r.condicionIva).toBeNull();
