@@ -1,6 +1,9 @@
 // Main class
 export { ArcaPadron } from './arca-padron.js';
 
+// Helpers puros
+export { condicionIvaDesdePadron } from './condicion-iva.js';
+
 // Persistencia de tickets (desde arca-common)
 export { MemoryTicketStorage, FileTicketStorage } from '@ramiidv/arca-common';
 
