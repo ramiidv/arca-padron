@@ -59,12 +59,17 @@ export enum TipoPersona {
   JURIDICA = 'JURIDICA',
 }
 
-/** IDs de impuestos comunes */
+/** IDs de impuestos comunes (SUPA) */
 export enum ImpuestoId {
   GANANCIAS_PJ = 10,
   GANANCIAS_PH = 11,
+  /** Monotributo (manual ws_sr_constancia_inscripcion v4.1). */
+  MONOTRIBUTO = 20,
+  /**
+   * @deprecated El impuesto 20 es Monotributo (antes estaba mal rotulado). El
+   * monotributo social se identifica por la categoría (61, 99, 100), no por el impuesto.
+   */
   MONOTRIBUTO_SOCIAL = 20,
-  MONOTRIBUTO = 21,
   IVA_RESPONSABLE_INSCRIPTO = 30,
   BIENES_PERSONALES = 31,
   IVA_EXENTO = 32,
