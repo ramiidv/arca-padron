@@ -1,5 +1,6 @@
 import { ensureArray } from './soap-client.js';
 import type { CallOptions } from '@ramiidv/arca-common';
+import { optNumber as num, optString as str, records as list, type SoapRecord as R } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type {
   ActividadA5,
@@ -12,12 +13,6 @@ import type {
 } from './types.js';
 
 export type PadronA5ClientConfig = PadronClientConfig;
-
-type R = Record<string, unknown>;
-
-const str = (v: unknown): string | undefined => (v === undefined || v === null ? undefined : String(v));
-const num = (v: unknown): number | undefined => (v === undefined || v === null || v === '' ? undefined : Number(v));
-const list = (v: unknown): R[] => ensureArray(v as R | R[] | undefined);
 
 /**
  * Client for ws_sr_constancia_inscripcion (ex ws_sr_padron_a5, deprecado por
