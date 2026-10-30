@@ -7,7 +7,7 @@
  */
 
 import { readFileSync } from 'fs';
-import { ArcaPadron, CollectionName } from '@ramiidv/arca-padron-sdk';
+import { ArcaPadron, CollectionName } from '@ramiidv/arca-padron';
 
 const client = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),

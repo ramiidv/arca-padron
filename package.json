@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-padron",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript SDK para los web services de Padrón de ARCA (ex AFIP) - Constancia de Inscripción, A4, A10, A13 y A100",
   "type": "module",
   "main": "./dist/cjs/index.js",

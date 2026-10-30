@@ -12,7 +12,7 @@ import {
   ArcaAuthError,
   ArcaPadronServiceError,
   ArcaSoapError,
-} from '@ramiidv/arca-padron-sdk';
+} from '@ramiidv/arca-padron';
 
 const client = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),
@@ -23,10 +23,10 @@ const client = new ArcaPadron({
   onEvent: (event) => {
     switch (event.type) {
       case 'auth:login':
-        console.log(`[AUTH] Iniciando login para servicio: ${event.serviceId}`);
+        console.log(`[AUTH] Login para servicio: ${event.service}`);
         break;
       case 'auth:cache-hit':
-        console.log(`[AUTH] Token en cache para servicio: ${event.serviceId}`);
+        console.log(`[AUTH] Token reutilizado (${event.source}) para servicio: ${event.service}`);
         break;
       case 'request:start':
         console.log(`[REQ] Iniciando ${event.method} a ${event.endpoint}`);
@@ -35,10 +35,10 @@ const client = new ArcaPadron({
         console.log(`[REQ] ${event.method} completado en ${event.durationMs}ms`);
         break;
       case 'request:retry':
-        console.log(`[REQ] Reintento #${event.attempt} para ${event.method}: ${event.error.message}`);
+        console.log(`[REQ] Reintento #${event.attempt} para ${event.method}: ${String(event.error)}`);
         break;
       case 'request:error':
-        console.log(`[REQ] Error en ${event.method}: ${event.error.message}`);
+        console.log(`[REQ] Error en ${event.method}: ${String(event.error)}`);
         break;
     }
   },

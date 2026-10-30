@@ -1,19 +1,19 @@
-# @ramiidv/arca-padron-sdk
+# @ramiidv/arca-padron
 
-> TypeScript SDK para los web services de Padron de ARCA (ex AFIP) - Alcances A4, A10 y A100
+> TypeScript SDK para los web services de Padron de ARCA (ex AFIP) - Constancia de Inscripcion (ex A5), A4, A10, A13 y A100, mas condicionIvaDesdePadron
 
 ## Instalacion
 
 ```bash
-npm install @ramiidv/arca-padron-sdk
+npm install @ramiidv/arca-padron
 ```
 
-Requisitos: Node.js >= 18 (fetch nativo). ESM only.
+Requisitos: Node.js >= 18 (fetch nativo). Dual ESM + CommonJS.
 
 ## Configuracion
 
 ```typescript
-import { ArcaPadron } from '@ramiidv/arca-padron-sdk';
+import { ArcaPadron } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
   cert: string,          // PEM X.509 certificate
@@ -22,11 +22,31 @@ const padron = new ArcaPadron({
   production?: boolean,  // default: false (homologacion)
   retries?: number,      // default: 1
   retryDelayMs?: number, // default: 1000
-  onEvent?: (event: ArcaPadronEvent) => void,
+  onEvent?: (event: ArcaEvent) => void,
+  ticketStorage?: TicketStorage, // persist WSAA tickets across restarts (recommended)
+  clockOffsetMs?: number,        // ARCA clock - local clock, ms. Default: 0
+  autoClockSkew?: boolean,       // default: true
+  signal?: AbortSignal,          // global cancellation
+  wsaa?: WsaaClient,             // shared WSAA client (e.g. arca.wsaa from arca-facturacion)
 });
 ```
 
+Every method accepts an optional last argument `{ signal?: AbortSignal }`.
+Without `ticketStorage`, a restart loses the access ticket and WSAA rejects new logins until it expires (`ArcaTicketVigenteError`).
+
 ## Metodos principales
+
+### getConstanciaInscripcion(cuit: string): Promise<PersonaA5>
+Constancia de inscripcion via ws_sr_constancia_inscripcion (getPersona_v2; replaces ws_sr_padron_a5, deprecated by ARCA). PersonaA5: idPersona, tipoPersona, nombre/apellido/razonSocial, estadoClave, domicilioFiscal, dependencia, caracterizacion[], regimenGeneral { impuestos, actividades, regimenes, categoriaAutonomo }, monotributo { impuestos, actividades, actividadMonotributista, categoria }, impuestos (both regimes), errorConstancia { error[] }, errorRegimenGeneral, errorMonotributo.
+
+### condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): { condicionIva: CondicionIva | null; motivo: string }
+Pure helper. Monotributo active (impuesto 20 or category) → MONOTRIBUTISTA (6), MONOTRIBUTO_SOCIAL (13) for categories 61/99/100, MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO (16) by category description; IVA 30 active → RESPONSABLE_INSCRIPTO (1); IVA exento 32 → EXENTO (4); IVA no alcanzado 34 → IVA_NO_ALCANZADO (15); otherwise null with motivo (never assumes consumidor final). Use the result as `condicionIva` in @ramiidv/arca-facturacion.
+
+### getPersonaA13(cuit: string): Promise<PersonaA13>
+Datos basicos via ws_sr_padron_a13 (domicilio[] with calle, numero, codigoPostal, ...).
+
+### getIdPersonaListByDocumento(documento: string): Promise<string[]>
+CUIT/CUIL list for a DNI via ws_sr_padron_a13.
 
 ### getPersona(cuit: string): Promise<PersonaA4>
 Datos completos del contribuyente via ws_sr_padron_a4. Incluye: domicilios, impuestos, actividades, regimenes, relaciones, categorias, emails, telefonos.
@@ -37,8 +57,8 @@ Datos basicos del contribuyente via ws_sr_padron_a10. Incluye: datos generales y
 ### getParametros(collection: string): Promise<ParameterRecord[]>
 Tablas de parametros via ws_sr_padron_a100. Usa el enum CollectionName con valores SUPA.* prefijados. Colecciones: PROVINCIA (SUPA.E_PROVINCIA), TIPO_DOCUMENTO (SUPA.TIPO_DOCUMENTO), TIPO_DOMICILIO (SUPA.TIPO_DOMICILIO), TIPO_CLAVE (SUPA.TIPO_CLAVE_IDENTIFICACION), TIPO_EMPRESA_JURIDICA, TIPO_EMPRESA_JURIDICA_SUBGRUPO, TIPO_RELACION, TIPO_SUBTIPO_RELACION, TIPO_COMPONENTE_SOCIEDAD, TIPO_RELACION_COMPONENTE_SOC, TIPO_EMAIL, TIPO_TELEFONO, TIPO_RESIDENCIA, TIPO_DATO_ADICIONAL_DOMICILIO, ORGANISMO_INFORMANTE, ORGANISMO_CONTROL, PROVINCIA_SOCIEDAD_ORG, SEXO, CALLE, LOCALIDAD.
 
-### status(): Promise<{ a4: ServerStatus, a10: ServerStatus, a100: ServerStatus }>
-Health check de los tres servicios. No requiere autenticacion.
+### status(): Promise<{ a5, a4, a10, a13, a100 }>
+Health check de los servicios. No requiere autenticacion.
 
 ## Tipos principales
 
@@ -121,14 +141,15 @@ interface ServerStatus {
 
 ## Errores
 
-4-class hierarchy:
-- ArcaPadronError: base class
+All extend ArcaError (from @ramiidv/arca-common), have a stable `code`, and instanceof works across duplicated package copies:
+- ArcaPadronError
 - ArcaAuthError: WSAA authentication failures
+- ArcaTicketVigenteError (extends ArcaAuthError): WSAA already issued a valid TA not available in memory/storage
 - ArcaPadronServiceError: business errors from ARCA (has errors: {code: number, msg: string}[])
-- ArcaSoapError: HTTP/transport errors (has statusCode?: number)
+- ArcaSoapError: HTTP/transport errors and SOAP Faults (statusCode?, faultCode?, faultString?, uncertain, aborted). "Persona inexistente" comes as a SOAP Fault.
 
 ```typescript
-import { ArcaAuthError, ArcaPadronServiceError, ArcaSoapError } from '@ramiidv/arca-padron-sdk';
+import { ArcaAuthError, ArcaPadronServiceError, ArcaSoapError } from '@ramiidv/arca-padron';
 
 try {
   await padron.getPersona(cuit);
@@ -141,19 +162,20 @@ try {
 
 ## Eventos
 
-Discriminated union types: auth:login, auth:cache-hit, request:start, request:end, request:retry, request:error.
+Discriminated union types: auth:login, auth:cache-hit (source: memory|storage), auth:clock-skew, auth:storage-error, request:start, request:end, request:retry, request:error.
 
 ## Enums
 
 - Provincia (0-24, Argentine provinces)
 - TipoDomicilio (FISCAL, LEGAL, REAL)
 - TipoPersona (FISICA, JURIDICA)
-- ImpuestoId (IVA_RESPONSABLE_INSCRIPTO=30, IVA_EXENTO=32, MONOTRIBUTO=20, EMPLEADOR=301, GANANCIAS_PH=11, GANANCIAS_PJ=10, BIENES_PERSONALES=31)
+- ImpuestoId (IVA_RESPONSABLE_INSCRIPTO=30, IVA_EXENTO=32, IVA_NO_ALCANZADO=34, MONOTRIBUTO=20, EMPLEADOR=301, GANANCIAS_PH=11, GANANCIAS_PJ=10, BIENES_PERSONALES=31). MONOTRIBUTO_SOCIAL=20 is deprecated (social monotributo is identified by category).
+- CondicionIva (re-exported from @ramiidv/arca-common)
 - CollectionName (PROVINCIA, TIPO_DOCUMENTO, TIPO_DOMICILIO, TIPO_CLAVE, TIPO_EMPRESA_JURIDICA, TIPO_EMPRESA_JURIDICA_SUBGRUPO, TIPO_RELACION, TIPO_SUBTIPO_RELACION, TIPO_COMPONENTE_SOCIEDAD, TIPO_RELACION_COMPONENTE_SOC, TIPO_EMAIL, TIPO_TELEFONO, TIPO_RESIDENCIA, TIPO_DATO_ADICIONAL_DOMICILIO, ORGANISMO_INFORMANTE, ORGANISMO_CONTROL, PROVINCIA_SOCIEDAD_ORG, SEXO, CALLE, LOCALIDAD)
 
 ## Clientes de bajo nivel
 
-Accesibles como propiedades publicas: padron.wsaa, padron.a4, padron.a10, padron.a100.
+Accesibles como propiedades publicas: padron.wsaa, padron.a5 (constancia), padron.a4, padron.a10, padron.a13, padron.a100.
 
 ## Utilidades exportadas
 
