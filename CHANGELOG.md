@@ -14,13 +14,17 @@
   `getPersona_v2`), que reemplaza a Padrón A5 (deprecado por ARCA). Tipo `PersonaA5` con datos
   generales, domicilio fiscal, caracterizaciones, régimen general, monotributo y errores.
 - `getPersonaA13(cuit)` y `getIdPersonaListByDocumento(dni)` (`ws_sr_padron_a13`).
-- `condicionIvaDesdePadron(persona)`: condición frente al IVA para `CondicionIVAReceptorId`.
+- `condicionIvaDesdePadron(persona)`: condición frente al IVA para `CondicionIVAReceptorId` (también
+  reconoce el impuesto 30 en estado `EX` / `NA`).
 - `ticketStorage`, `clockOffsetMs`, `autoClockSkew`, `signal` y `wsaa` en `ArcaPadronConfig`; `signal`
   por llamada en todos los métodos.
+- `ArcaPadronError` y `ArcaPadronServiceError` tienen `code` propio (`ARCA_PADRON_ERROR`,
+  `ARCA_PADRON_SERVICE_ERROR`).
 - Re-exporta `CondicionIva`, `MemoryTicketStorage`, `FileTicketStorage` y `ArcaTicketVigenteError`.
 - Build dual ESM + CommonJS con `exports` condicional, y smoke test CommonJS/ESM en CI.
 
 ### Fixes
+- Se quitaron dependencias que no se usaban (`fast-xml-parser`, `node-forge`): todo pasa por arca-common.
 - A4, A10 y A100 no desenvolvían `personaReturn` / `parameterCollectionReturn`: con respuestas reales de
   ARCA los datos quedaban vacíos y A100 devolvía `[]`.
 - Documentación: el paquete es `@ramiidv/arca-padron` (decía `@ramiidv/arca-padron-sdk`, que da 404).
