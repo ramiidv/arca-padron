@@ -1,4 +1,5 @@
-import { afipSoapCall, ensureArray } from './soap-client.js';
+import { ensureArray } from './soap-client.js';
+import type { CallOptions } from '@ramiidv/arca-common';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type {
   PersonaA4,
@@ -15,21 +16,13 @@ export class PadronA4Client extends BasePadronClient {
    * Get full taxpayer data for a given CUIT.
    * @param auth - Authentication object with Token, Sign, and CuitRepresentada
    * @param cuit - CUIT of the taxpayer to query
+   * @param opts - Opciones por llamada (signal)
    */
-  async getPersona(auth: WsAuth, cuit: string): Promise<PersonaA4> {
-    const params = {
-      token: auth.Token,
-      sign: auth.Sign,
-      cuitRepresentada: auth.CuitRepresentada,
-      idPersona: cuit,
-    };
-
-    const result = await afipSoapCall(
-      this.endpoint,
-      this.namespace,
+  async getPersona(auth: WsAuth, cuit: string, opts?: CallOptions): Promise<PersonaA4> {
+    const result = await this.call(
       'getPersona',
-      params,
-      { ...this.soapOptions, onEvent: this.onEvent },
+      { ...this.authParams(auth), idPersona: cuit },
+      opts,
     );
 
     // Extract persona data

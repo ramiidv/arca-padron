@@ -1,7 +1,7 @@
 import { WSAA_ENDPOINTS } from '@ramiidv/arca-common';
 
 // Re-export shared enums from common
-export { Provincia, DocTipo as TipoDocumento } from '@ramiidv/arca-common';
+export { Provincia, DocTipo as TipoDocumento, CondicionIva } from '@ramiidv/arca-common';
 
 // ---------------------------------------------------------------------------
 // Endpoints
@@ -9,6 +9,19 @@ export { Provincia, DocTipo as TipoDocumento } from '@ramiidv/arca-common';
 
 export const ENDPOINTS = {
   wsaa: WSAA_ENDPOINTS,
+  /** Constancia de inscripción (ex Padrón A5: ws_sr_padron_a5 está deprecado por ARCA). */
+  a5: {
+    testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+    namespace: 'http://a5.soap.ws.server.puc.sr/',
+    serviceId: 'ws_sr_constancia_inscripcion',
+  },
+  a13: {
+    testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13',
+    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13',
+    namespace: 'http://a13.soap.ws.server.puc.sr/',
+    serviceId: 'ws_sr_padron_a13',
+  },
   a4: {
     testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA4',
     production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4',
