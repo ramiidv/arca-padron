@@ -1,4 +1,5 @@
-import { afipSoapCall, ensureArray } from './soap-client.js';
+import { ensureArray } from './soap-client.js';
+import type { CallOptions } from '@ramiidv/arca-common';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type {
   ParameterRecord,
@@ -19,20 +20,12 @@ export class PadronA100Client extends BasePadronClient {
   async getParameterCollectionByName(
     auth: WsAuth,
     collectionName: string,
+    opts?: CallOptions,
   ): Promise<ParameterRecord[]> {
-    const params = {
-      token: auth.Token,
-      sign: auth.Sign,
-      cuitRepresentada: auth.CuitRepresentada,
-      collectionName: collectionName,
-    };
-
-    const result = await afipSoapCall(
-      this.endpoint,
-      this.namespace,
+    const result = await this.call(
       'getParameterCollectionByName',
-      params,
-      { ...this.soapOptions, onEvent: this.onEvent },
+      { ...this.authParams(auth), collectionName },
+      opts,
     );
 
     // Extract parameter collection

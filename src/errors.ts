@@ -1,5 +1,5 @@
 // Base errors re-exported from common
-export { ArcaError, ArcaAuthError, ArcaSoapError, ArcaServiceError } from '@ramiidv/arca-common';
+export { ArcaError, ArcaAuthError, ArcaSoapError, ArcaServiceError, ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaError, ArcaServiceError } from '@ramiidv/arca-common';
 
 /**

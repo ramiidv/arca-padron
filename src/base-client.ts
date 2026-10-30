@@ -1,5 +1,6 @@
-import { afipSoapCall } from '@ramiidv/arca-common';
-import type { ArcaEvent, SoapCallOptions, ServerStatus } from '@ramiidv/arca-common';
+import { afipSoapCall } from './soap-client.js';
+import type { ArcaEvent, CallOptions, SoapCallOptions, ServerStatus } from '@ramiidv/arca-common';
+import type { WsAuth } from './types.js';
 
 /** Shared configuration for all Padrón service clients. */
 export interface PadronClientConfig {
@@ -16,6 +17,11 @@ export interface PadronClientConfig {
 /**
  * Abstract base class for Padrón web service clients.
  * Provides shared constructor logic and health-check method.
+ *
+ * Los WS de Padrón declaran los parámetros sin namespace
+ * (`elementFormDefault="unqualified"`): `afipSoapCall` de arca-common prefija
+ * el método y deja los parámetros sin namespace. Todas las consultas se
+ * reintentan ante errores transitorios.
  */
 export abstract class BasePadronClient {
   protected readonly endpoint: string;
@@ -30,15 +36,31 @@ export abstract class BasePadronClient {
     this.onEvent = config.onEvent;
   }
 
+  /** Llama a un método del servicio. */
+  protected call(
+    method: string,
+    params: Record<string, unknown>,
+    opts?: CallOptions,
+  ): Promise<Record<string, unknown>> {
+    return afipSoapCall(this.endpoint, this.namespace, method, params, {
+      ...this.soapOptions,
+      onEvent: this.onEvent,
+      signal: opts?.signal,
+    });
+  }
+
+  /** Parámetros de autenticación en el orden del WSDL: token, sign, cuitRepresentada. */
+  protected authParams(auth: WsAuth): Record<string, unknown> {
+    return {
+      token: auth.Token,
+      sign: auth.Sign,
+      cuitRepresentada: auth.CuitRepresentada,
+    };
+  }
+
   /** Health check for this service. */
-  async dummy(): Promise<ServerStatus> {
-    const result = await afipSoapCall(
-      this.endpoint,
-      this.namespace,
-      'dummy',
-      {},
-      { ...this.soapOptions, onEvent: this.onEvent },
-    );
+  async dummy(opts?: CallOptions): Promise<ServerStatus> {
+    const result = await this.call('dummy', {}, opts);
 
     return {
       appserver: (result['appserver'] ?? '') as string,
