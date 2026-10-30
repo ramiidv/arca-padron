@@ -1,14 +1,10 @@
 import { ensureArray } from './soap-client.js';
 import type { CallOptions } from '@ramiidv/arca-common';
+import { optNumber as num, optString as str, records as list, type SoapRecord as R } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type { DomicilioA13, PersonaA13, WsAuth } from './types.js';
 
 export type PadronA13ClientConfig = PadronClientConfig;
-
-type R = Record<string, unknown>;
-
-const str = (v: unknown): string | undefined => (v === undefined || v === null ? undefined : String(v));
-const num = (v: unknown): number | undefined => (v === undefined || v === null || v === '' ? undefined : Number(v));
 
 /**
  * Client for ws_sr_padron_a13 - Datos básicos de un contribuyente.
@@ -80,7 +76,7 @@ export function mapPersonaA13(raw: R): PersonaA13 {
     persona.claveInactivaAsociada = ensureArray(raw['claveInactivaAsociada'] as unknown).map(String);
   }
   if (raw['domicilio'] !== undefined) {
-    persona.domicilio = ensureArray(raw['domicilio'] as R | R[]).map(mapDomicilio);
+    persona.domicilio = list(raw['domicilio']).map(mapDomicilio);
   }
   return persona;
 }

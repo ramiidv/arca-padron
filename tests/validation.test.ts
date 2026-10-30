@@ -10,7 +10,7 @@ import { ensureArray } from '../src/soap-client.js';
 import { PadronA4Client } from '../src/padron-a4.js';
 import { PadronA10Client } from '../src/padron-a10.js';
 import { ArcaPadronServiceError } from '../src/errors.js';
-import type { WsAuth, PersonaA4, PersonaA10 } from '../src/types.js';
+import type { WsAuth } from '../src/types.js';
 
 // ---------------------------------------------------------------------------
 // Mock the SOAP layer so we never hit the network
