@@ -9,7 +9,8 @@ import type { CondicionIvaPadron, PersonaA4, PersonaA5 } from './types.js';
  *   estadoImpuesto "AC" = activo; las categorías 61, 99 y 100 son de
  *   monotributo social ("B MONOTRIBUTO SOCIAL ...").
  * - IVA exento (32) e IVA no alcanzado (34) no figuran en ese manual: se
- *   reconocen por id o por la descripción del impuesto.
+ *   reconocen por id o por la descripción del impuesto. También se reconoce el
+ *   impuesto 30 con estado SUPA "EX" (exento) o "NA" (no alcanzado).
  * - Valores de CondicionIva: FEParamGetCondicionIvaReceptor (WSFEv1).
  */
 
@@ -18,6 +19,7 @@ const CATEGORIAS_MONOTRIBUTO_SOCIAL = new Set([61, 99, 100]);
 interface Impuesto {
   id: number;
   descripcion: string;
+  estado: string;
   activo: boolean;
 }
 
@@ -34,12 +36,14 @@ function impuestosDe(persona: PersonaA5 | PersonaA4): Impuesto[] {
     return persona.impuestos.map((i) => ({
       id: i.idImpuesto,
       descripcion: i.descripcionImpuesto ?? '',
+      estado: (i.estadoImpuesto ?? '').trim().toUpperCase(),
       activo: activo(i.estadoImpuesto),
     }));
   }
   return (persona.impuesto ?? []).map((i) => ({
     id: i.idImpuesto,
     descripcion: i.descripcionImpuesto ?? '',
+    estado: (i.estado ?? '').trim().toUpperCase(),
     activo: activo(i.estado),
   }));
 }
@@ -100,6 +104,14 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
 
   if (tiene((i) => i.id === ImpuestoId.IVA_RESPONSABLE_INSCRIPTO)) {
     return { condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO, motivo: `Inscripto en IVA (impuesto 30).${advertencia}` };
+  }
+
+  const iva = impuestos.find((i) => i.id === ImpuestoId.IVA_RESPONSABLE_INSCRIPTO);
+  if (iva?.estado === 'EX') {
+    return { condicionIva: CondicionIva.EXENTO, motivo: `IVA (impuesto 30) en estado exento.${advertencia}` };
+  }
+  if (iva?.estado === 'NA') {
+    return { condicionIva: CondicionIva.IVA_NO_ALCANZADO, motivo: `IVA (impuesto 30) en estado no alcanzado.${advertencia}` };
   }
 
   if (tiene((i) => i.id === ImpuestoId.IVA_EXENTO || /IVA\s+EXENTO/i.test(i.descripcion))) {

@@ -7,6 +7,8 @@ import { ArcaError, ArcaServiceError } from '@ramiidv/arca-common';
  * Extends ArcaError from common for backward compatibility.
  */
 export class ArcaPadronError extends ArcaError {
+  static override readonly code: string = 'ARCA_PADRON_ERROR';
+
   constructor(message: string) {
     super(message);
     this.name = 'ArcaPadronError';
@@ -18,6 +20,8 @@ export class ArcaPadronError extends ArcaError {
  * Extiende ArcaServiceError de common.
  */
 export class ArcaPadronServiceError extends ArcaServiceError {
+  static override readonly code: string = 'ARCA_PADRON_SERVICE_ERROR';
+
   constructor(message: string, errors: { code: number; msg: string }[]) {
     super(message, errors);
     this.name = 'ArcaPadronServiceError';
