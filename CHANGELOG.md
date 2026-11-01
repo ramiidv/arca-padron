@@ -45,7 +45,11 @@
   `numeroInscripcion`) salían como `number`; ahora son `string`. A4 y A10 usan los helpers de
   `mapping.ts` (sin bloques duplicados de dependencia, claves inactivas y domicilio).
 - A100: `id`, `description`, `name` y `value` se preservan tal cual (`"10.50"` ya no se convierte en
-  `10.5`, ni `"1E3"` en `1000`).
+  `10.5`, ni `"1E3"` en `1000`). Usa `parseNumbers: false` de arca-common en lugar de envolver `fetch`:
+  el A100 ya no desactiva el fallback TLS legacy (`legacyTls`) y respeta el `fetch` de la config.
+- Todos los servicios parsean las respuestas con `parseNumbers: false` y convierten explícitamente los
+  campos numéricos del WSDL: los `xs:string` con decimales, exponente o ceros a la izquierda
+  (`datoAdicional`, `piso`, `numeroDocumento`, etc.) llegan tal cual (`"1.50"` antes era `"1.5"`).
 - Los elementos `xsi:nil="true"` se tratan como ausentes (antes, por ejemplo, una caracterización nil
   se mapeaba como `{ idCaracterizacion: 0 }`).
 - `condicionIvaDesdePadron`: reconoce los estados del manual A4 en palabras (`ACTIVO EN TRAMITE`,

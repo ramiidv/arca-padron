@@ -1,6 +1,5 @@
 import { afipSoapCall, validateCuit } from '@ramiidv/arca-common';
 import type {
-  AfipSoapCallOptions,
   ArcaEvent,
   CallOptions,
   ServerStatus,
@@ -34,6 +33,12 @@ export interface PadronClientConfig {
  * operaciones son consultas: se reintentan ante errores transitorios (nunca
  * ante un SOAP Fault). Los Faults de negocio conocidos (CUIT inexistente,
  * clave inactiva, token no autorizado...) se lanzan como `ArcaPadronServiceError`.
+ *
+ * Las respuestas se parsean con `parseNumbers: false`: todos los valores llegan
+ * como string tal cual los envía ARCA, y `mapping.ts` convierte explícitamente
+ * los campos numéricos del WSDL (`optNumber`/`reqNumber`). Así los `xs:string`
+ * con contenido numérico (`datoAdicional`, `codPostal`, `piso`, los campos del
+ * A100...) no pierden ceros ni decimales (`"10.50"`, `"1E3"`).
  */
 export abstract class BasePadronClient {
   protected readonly endpoint: string;
@@ -53,12 +58,11 @@ export abstract class BasePadronClient {
     method: string,
     params: Record<string, unknown>,
     opts?: CallOptions,
-    extra?: Pick<AfipSoapCallOptions, 'fetch'>,
   ): Promise<Record<string, unknown>> {
     try {
       return await afipSoapCall(this.endpoint, this.namespace, method, params, {
         ...this.soapOptions,
-        ...extra,
+        parseNumbers: false,
         kind: 'consulta',
         onEvent: this.onEvent,
         signal: opts?.signal,

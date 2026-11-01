@@ -402,6 +402,22 @@ describe('A4: respuestas realistas', () => {
     expect(p.telefono).toEqual([{ numero: '1144445555', tipoTelefono: 'PARTICULAR', tipoLinea: undefined }]);
   });
 
+  it('xs:string con decimales o exponente se preservan; los numéricos del WSDL siguen siendo number', async () => {
+    const client = await padron();
+    const xml = personaA4(imp4(30, 'ACTIVO'), '<mesCierre>12</mesCierre><porcentajeCapitalNacional>10.50</porcentajeCapitalNacional>')
+      .replace('<datoAdicional>12</datoAdicional>', '<datoAdicional>1.50</datoAdicional>')
+      .replace('<numeroInscripcion>12345</numeroInscripcion>', '<numeroInscripcion>1E3</numeroInscripcion>');
+    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', xml));
+    const p = await client.getPersona('20000000516');
+    expect(p.domicilio?.[0]).toMatchObject({ datoAdicional: '1.50', idProvincia: 0, orden: 1, localidad: '0123' });
+    expect(p.numeroInscripcion).toBe('1E3');
+    expect(p.mesCierre).toBe(12);
+    expect(p.porcentajeCapitalNacional).toBe(10.5);
+    expect(p.impuesto).toEqual([
+      { idImpuesto: 30, descripcionImpuesto: 'IVA', estado: 'ACTIVO', periodo: 200611, diaPeriodo: undefined, ffInscripcion: undefined },
+    ]);
+  });
+
   it('IVA (30) EXENTO → Exento', async () => {
     const client = await padron();
     mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', personaA4(imp4(30, 'EXENTO'))));
@@ -492,6 +508,24 @@ describe('A13', () => {
     expect(p.estadoClave).toBe('INACTIVO');
     expect(p.domicilio?.map((d) => d.tipoDomicilio)).toEqual(['FISCAL', 'LEGAL/REAL']);
     expect(p.domicilio?.[0]).toMatchObject({ codigoPostal: '4600', numero: 415, estadoDomicilio: 'DECLARADO' });
+  });
+
+  it('domicilio: piso/datoAdicional con decimales quedan como string; numero e idProvincia son number', async () => {
+    const client = await padron();
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a13.namespace,
+        'getPersona',
+        '<personaReturn><persona><domicilio><datoAdicional>2.10</datoAdicional><idProvincia>6</idProvincia>' +
+          '<numero>415</numero><piso>01</piso></domicilio><idPersona>20002444233</idPersona>' +
+          '<numeroDocumento>0265181</numeroDocumento><periodoActividadPrincipal>201311</periodoActividadPrincipal>' +
+          '<tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
+      ),
+    );
+    const p = await client.getPersonaA13('20002444233');
+    expect(p.domicilio?.[0]).toMatchObject({ datoAdicional: '2.10', piso: '01', numero: 415, idProvincia: 6 });
+    expect(p.numeroDocumento).toBe('0265181');
+    expect(p.periodoActividadPrincipal).toBe(201311);
   });
 
   it.each([
