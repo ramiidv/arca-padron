@@ -7,7 +7,7 @@ export type {
   TicketStorage,
   CallOptions,
 } from '@ramiidv/arca-common';
-import type { ArcaEvent, CondicionIva, TicketStorage, WsaaClient } from '@ramiidv/arca-common';
+import type { ArcaBaseConfig, ArcaEvent, CondicionIva, ServerStatus, WsaaClient } from '@ramiidv/arca-common';
 
 // ---------------------------------------------------------------------------
 // Backward-compatible alias
@@ -20,42 +20,33 @@ export type ArcaPadronEvent = ArcaEvent;
 // Configuration
 // ---------------------------------------------------------------------------
 
-export interface ArcaPadronConfig {
-  /** PEM-encoded X.509 certificate */
-  cert: string;
-  /** PEM-encoded RSA private key */
-  key: string;
-  /** CUIT of the entity represented (e.g. "20123456789") */
-  cuit: string;
-  /** Use production endpoints (default: false = testing / homologacion) */
-  production?: boolean;
-  /** Request timeout in ms (default: 30000) */
-  timeout?: number;
-  /** Number of retries on 5xx / network errors (default: 1) */
-  retries?: number;
-  /** Base delay in ms for exponential backoff (default: 1000) */
-  retryDelayMs?: number;
-  /** Optional event callback */
-  onEvent?: (event: ArcaEvent) => void;
-  /**
-   * Persistencia de Tickets de Acceso entre reinicios. Sin storage, al
-   * reiniciar el proceso WSAA rechaza el login hasta que venza el ticket
-   * anterior (`ArcaTicketVigenteError`).
-   */
-  ticketStorage?: TicketStorage;
-  /** Diferencia `relojARCA - relojLocal` en ms (default: 0). */
-  clockOffsetMs?: number;
-  /** Ajustar el desfase de reloj si WSAA rechaza el login (default: true). */
-  autoClockSkew?: boolean;
+/** Servicios de Padrón con endpoint propio. */
+export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
+
+/**
+ * Configuración de `ArcaPadron`. Extiende la configuración común de los SDKs
+ * de ARCA (`ArcaBaseConfig`: cert, key, cuit, production, timeout, retries,
+ * ticketStorage, clockOffsetMs, autoClockSkew, loginErrorCooldownMs, fetch,
+ * legacyTls, etc.).
+ */
+export interface ArcaPadronConfig extends ArcaBaseConfig {
   /** Signal global: cancela todas las llamadas de esta instancia. */
   signal?: AbortSignal;
   /**
    * WsaaClient compartido (ej: `arca.wsaa` de arca-facturacion, mismo
    * certificado). Si se provee, se ignoran `cert`, `key`, `ticketStorage`,
-   * `clockOffsetMs` y `autoClockSkew`.
+   * `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` y `tokenTTLMinutes`.
    */
   wsaa?: WsaaClient;
+  /**
+   * Endpoints propios (proxy, mock, etc.). Los que no se indiquen usan los
+   * oficiales según `production` (ver `ENDPOINTS`).
+   */
+  endpoints?: Partial<Record<PadronServicio | 'wsaa', string>>;
 }
+
+/** Resultado de `status()`: el de cada servicio por separado (uno caído no oculta a los demás). */
+export type PadronStatus = Record<PadronServicio, PromiseSettledResult<ServerStatus>>;
 
 // ---------------------------------------------------------------------------
 // Authentication
@@ -72,27 +63,19 @@ export interface WsAuth {
 // ---------------------------------------------------------------------------
 
 export interface DependenciaA4 {
-  idDependencia: number;
-  descripcionDependencia: string;
+  idDependencia?: number;
+  descripcionDependencia?: string;
 }
 
-export interface DomicilioA4 {
-  direccion: string;
-  localidad?: string;
-  codPostal?: string;
-  idProvincia?: number;
-  descripcionProvincia?: string;
-  tipoDomicilio: string;
-  estadoDomicilio?: string;
-  datoAdicional?: string;
-  tipoDatoAdicional?: string;
+export interface DomicilioA4 extends DomicilioA10 {
   orden?: number;
 }
 
 export interface ImpuestoA4 {
   idImpuesto: number;
   descripcionImpuesto?: string;
-  estado: string;
+  /** Estado (manual A4 §5.3): ACTIVO, ACTIVO EN TRAMITE, BAJA PROVISORIA, BAJA DEFINITIVA, EXENTO, EXENTO EN TRAMITE, NO APORTANTE. */
+  estado?: string;
   periodo?: number;
   diaPeriodo?: number;
   ffInscripcion?: string;
@@ -190,10 +173,7 @@ export interface PersonaA4 {
 // Padron A10 - Minimal persona
 // ---------------------------------------------------------------------------
 
-export interface DependenciaA10 {
-  idDependencia: number;
-  descripcionDependencia: string;
-}
+export type DependenciaA10 = DependenciaA4;
 
 export interface DomicilioA10 {
   direccion?: string;
@@ -229,7 +209,8 @@ export interface PersonaA10 {
 
 export interface ParameterAttribute {
   name: string;
-  value: string;
+  /** Valor tal cual lo envía ARCA (`xs:string`: "10.50" no se convierte a número). */
+  value?: string;
 }
 
 export interface ParameterRecord {
@@ -319,7 +300,7 @@ export interface CaracterizacionA5 {
 export interface ImpuestoA5 {
   idImpuesto: number;
   descripcionImpuesto?: string;
-  /** Estado en SUPA (ej: "AC" = activo) */
+  /** Id del estado en SUPA (`tipo_estado_impuesto`, ej: "AC" = activo) */
   estadoImpuesto?: string;
   motivo?: string;
   periodo?: number;
@@ -355,11 +336,24 @@ export interface RegimenGeneralA5 {
   categoriaAutonomo?: CategoriaA5;
 }
 
+/** `componenteDeSociedad` (tipo `relacion` del WSDL): integrante de una sociedad monotributista. */
+export interface ComponenteSociedadA5 {
+  idPersonaAsociada?: string;
+  apellidoPersonaAsociada?: string;
+  nombrePersonaAsociada?: string;
+  razonSocialPersonaAsociada?: string;
+  tipoComponente?: string;
+  ffRelacion?: string;
+  ffVencimiento?: string;
+}
+
 export interface MonotributoA5 {
   impuestos: ImpuestoA5[];
   actividades: ActividadA5[];
   actividadMonotributista?: ActividadA5;
   categoria?: CategoriaA5;
+  /** Componentes de la sociedad monotributista (presente en el WSDL; el manual v3.5 lo da por no vigente). */
+  componenteDeSociedad?: ComponenteSociedadA5[];
 }
 
 export interface ErrorConstanciaA5 {

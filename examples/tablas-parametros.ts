@@ -12,7 +12,7 @@ import { ArcaPadron, CollectionName } from '@ramiidv/arca-padron';
 const client = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
-  cuit: '20123456789',
+  cuit: '20123456786',
   production: false,
 });
 
@@ -24,6 +24,10 @@ async function main() {
     console.log(`  [${prov.id}] ${prov.descripcion}`);
   }
   console.log();
+
+  // Los atributos traen los valores tal cual los envía ARCA (strings)
+  const misiones = provincias.find((p) => p.id === '19');
+  console.log('Atributos de Misiones:', misiones?.atributos);
 
   // Consultar tabla de tipos de documento (SUPA.TIPO_DOCUMENTO)
   console.log('--- Tipos de Documento ---');

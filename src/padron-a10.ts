@@ -1,90 +1,45 @@
-import { ensureArray } from './soap-client.js';
+import { validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
+import {
+  asignarDependenciaYClaves,
+  mapDomicilio,
+  mapPersonaComun,
+  optString as str,
+  records as list,
+  requirePersona,
+  type SoapRecord as R,
+} from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type {
-  PersonaA10,
-  WsAuth,
-} from './types.js';
+import type { PersonaA10, WsAuth } from './types.js';
 
 export type PadronA10ClientConfig = PadronClientConfig;
 
 /**
- * Client for ws_sr_padron_a10 - Minimal taxpayer data.
+ * Client for ws_sr_padron_a10 - Datos básicos de un contribuyente.
  */
 export class PadronA10Client extends BasePadronClient {
   /**
-   * Get minimal taxpayer data for a given CUIT.
+   * Datos básicos de un contribuyente.
    * @param auth - Authentication object with Token, Sign, and CuitRepresentada
-   * @param cuit - CUIT of the taxpayer to query
+   * @param cuit - CUIT/CUIL a consultar (con o sin guiones; se valida el dígito verificador)
    * @param opts - Opciones por llamada (signal)
+   * @throws ArcaPadronServiceError si ARCA informa la CUIT inexistente, inactiva, etc.
    */
-  async getPersona(auth: WsAuth, cuit: string, opts?: CallOptions): Promise<PersonaA10> {
-    const result = await this.call(
-      'getPersona',
-      { ...this.authParams(auth), idPersona: cuit },
-      opts,
-    );
-
-    // Extract persona data
-    const persona = (result['persona'] ?? result) as Record<string, unknown>;
-
-    return this.mapPersona(persona);
+  async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA10> {
+    const idPersona = validateCuit(cuit);
+    const result = await this.call('getPersona', { ...this.authParams(auth), idPersona }, opts);
+    return mapPersonaA10(requirePersona(result, 'getPersona'));
   }
+}
 
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
-
-  private mapPersona(raw: Record<string, unknown>): PersonaA10 {
-    const persona: PersonaA10 = {
-      idPersona: String(raw['idPersona'] ?? ''),
-      tipoPersona: (raw['tipoPersona'] ?? 'FISICA') as 'FISICA' | 'JURIDICA',
-      tipoClave: raw['tipoClave'] as string | undefined,
-      estadoClave: raw['estadoClave'] as string | undefined,
-      nombre: raw['nombre'] as string | undefined,
-      apellido: raw['apellido'] as string | undefined,
-      razonSocial: raw['razonSocial'] as string | undefined,
-      numeroDocumento: raw['numeroDocumento'] != null
-        ? String(raw['numeroDocumento'])
-        : undefined,
-      tipoDocumento: raw['tipoDocumento'] as string | undefined,
-      idActividadPrincipal: raw['idActividadPrincipal'] != null
-        ? String(raw['idActividadPrincipal'])
-        : undefined,
-      descripcionActividadPrincipal: raw['descripcionActividadPrincipal'] as string | undefined,
-    };
-
-    // Dependencia (single object)
-    const dep = raw['dependencia'] as Record<string, unknown> | undefined;
-    if (dep) {
-      persona.dependencia = {
-        idDependencia: Number(dep['idDependencia'] ?? 0),
-        descripcionDependencia: String(dep['descripcionDependencia'] ?? ''),
-      };
-    }
-
-    // claveInactivaAsociada (array of strings)
-    const clavesInactivas = raw['claveInactivaAsociada'];
-    if (clavesInactivas) {
-      persona.claveInactivaAsociada = ensureArray<string>(clavesInactivas as string | string[]);
-    }
-
-    // Domicilio (array)
-    type R = Record<string, unknown>;
-    const domicilios = raw['domicilio'];
-    if (domicilios) {
-      persona.domicilio = ensureArray<R>(domicilios as R | R[]).map((d) => ({
-        direccion: d['direccion'] as string | undefined,
-        localidad: d['localidad'] as string | undefined,
-        codPostal: d['codPostal'] as string | undefined,
-        idProvincia: d['idProvincia'] != null ? Number(d['idProvincia']) : undefined,
-        descripcionProvincia: d['descripcionProvincia'] as string | undefined,
-        tipoDomicilio: d['tipoDomicilio'] as string | undefined,
-        datoAdicional: d['datoAdicional'] as string | undefined,
-        tipoDatoAdicional: d['tipoDatoAdicional'] as string | undefined,
-      }));
-    }
-
-    return persona;
-  }
+/** Mapea `persona` de A10 (WSDL personaServiceA10). */
+export function mapPersonaA10(raw: R): PersonaA10 {
+  const persona: PersonaA10 = {
+    ...mapPersonaComun(raw),
+    idActividadPrincipal: str(raw['idActividadPrincipal']),
+    descripcionActividadPrincipal: str(raw['descripcionActividadPrincipal']),
+  };
+  asignarDependenciaYClaves(persona, raw);
+  if (raw['domicilio'] !== undefined) persona.domicilio = list(raw['domicilio']).map(mapDomicilio);
+  return persona;
 }

@@ -13,16 +13,19 @@ import { ArcaPadron, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv
 const padron = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
-  cuit: '20123456789',
+  cuit: '20123456786',
   production: false,
   ticketStorage: new FileTicketStorage('./.arca-tickets'),
 });
 
 async function main() {
-  const constancia = await padron.getConstanciaInscripcion('30712345674');
+  const constancia = await padron.getConstanciaInscripcion('30712345671');
 
   if (constancia.errorConstancia) {
     console.warn('ARCA no emitió la constancia:', constancia.errorConstancia.error.join('; '));
+  }
+  if (constancia.errorRegimenGeneral || constancia.errorMonotributo) {
+    console.warn('Constancia parcial:', constancia.errorRegimenGeneral?.error, constancia.errorMonotributo?.error);
   }
 
   console.log(constancia.razonSocial ?? `${constancia.apellido} ${constancia.nombre}`);
@@ -41,4 +44,13 @@ async function main() {
   //   await arca.facturar({ ptoVta, cbteTipo, docTipo: DocTipo.CUIT, docNro, condicionIva, items });
 }
 
-main().catch(console.error);
+/** Hasta 250 CUITs en una llamada: las inexistentes vuelven con errorConstancia. */
+async function lote() {
+  const constancias = await padron.getConstanciasInscripcion(['20224107030', '27015942210']);
+  for (const c of constancias) {
+    const { condicionIva, motivo } = condicionIvaDesdePadron(c);
+    console.log(c.idPersona, condicionIva, motivo);
+  }
+}
+
+main().then(lote).catch(console.error);

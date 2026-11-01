@@ -72,11 +72,51 @@ describe('condicionIvaDesdePadron (constancia de inscripción)', () => {
     );
   });
 
-  it('impuesto 30 con estado EX o NA', () => {
-    expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', 'EX')] })).condicionIva).toBe(CondicionIva.EXENTO);
-    expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', 'NA')] })).condicionIva).toBe(
-      CondicionIva.IVA_NO_ALCANZADO,
+  it('impuesto 30 exento: abreviatura EX o palabras EXENTO / EXENTO EN TRAMITE', () => {
+    for (const estado of ['EX', 'EXENTO', 'EXENTO EN TRAMITE', 'Exento en trámite']) {
+      expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', estado)] })).condicionIva).toBe(CondicionIva.EXENTO);
+    }
+  });
+
+  it('NA / NO APORTANTE no es IVA no alcanzado (tabla TipoEstado del manual A4)', () => {
+    for (const estado of ['NA', 'NO APORTANTE']) {
+      expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', estado)] })).condicionIva).toBeNull();
+    }
+  });
+
+  it('ACTIVO EN TRAMITE cuenta como activo', () => {
+    expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', 'ACTIVO EN TRAMITE')] })).condicionIva).toBe(
+      CondicionIva.RESPONSABLE_INSCRIPTO,
     );
+  });
+
+  it('impuesto 20 en baja + categoría → no es monotributista (respeta el estado)', () => {
+    const r = condicionIvaDesdePadron(
+      a5({
+        impuestos: [imp(20, 'MONOTRIBUTO', 'BD')],
+        monotributo: {
+          impuestos: [imp(20, 'MONOTRIBUTO', 'BD')],
+          actividades: [],
+          categoria: { idCategoria: 36, descripcionCategoria: 'B LOCACIONES DE SERVICIO', idImpuesto: 20 },
+        },
+      }),
+    );
+    expect(r.condicionIva).toBeNull();
+  });
+
+  it.each([
+    [101, 'D 2 SOCIOS PROY. SERVICIOS', CondicionIva.MONOTRIBUTO_SOCIAL],
+    [104, 'E 3 SOCIOS PROY. PRODUCTIVO', CondicionIva.MONOTRIBUTO_SOCIAL],
+    [61, 'B MONOTRIBUTO SOCIAL AGROP.', CondicionIva.MONOTRIBUTO_SOCIAL],
+    [98, 'B ASOCIADO COOPERATIVA', CondicionIva.MONOTRIBUTISTA],
+  ])('categoría %i (%s)', (idCategoria, descripcionCategoria, esperado) => {
+    const r = condicionIvaDesdePadron(
+      a5({
+        impuestos: [imp(20, 'MONOTRIBUTO')],
+        monotributo: { impuestos: [imp(20, 'MONOTRIBUTO')], actividades: [], categoria: { idCategoria, descripcionCategoria } },
+      }),
+    );
+    expect(r.condicionIva).toBe(esperado);
   });
 
   it('impuestos dados de baja no cuentan', () => {

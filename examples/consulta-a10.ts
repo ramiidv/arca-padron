@@ -11,12 +11,12 @@ import { ArcaPadron } from '@ramiidv/arca-padron';
 const client = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
-  cuit: '20123456789',
+  cuit: '20123456786',
   production: false,
 });
 
 async function main() {
-  const cuitConsulta = '20123456789';
+  const cuitConsulta = '20-11111111-2'; // con o sin guiones
 
   console.log(`Consultando datos básicos para CUIT: ${cuitConsulta}`);
   const persona = await client.getPersonaBasic(cuitConsulta);

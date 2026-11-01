@@ -1,56 +1,72 @@
-import { ensureArray } from './soap-client.js';
+import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { optNumber as num, optString as str, records as list, type SoapRecord as R } from './mapping.js';
+import { ArcaPadronError } from './errors.js';
+import {
+  mapDomicilio,
+  optNumber as num,
+  optString as str,
+  record,
+  records as list,
+  reqNumber,
+  reqString,
+  strings,
+  type SoapRecord as R,
+} from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type {
-  ActividadA5,
-  CategoriaA5,
-  DomicilioA5,
-  ErrorRegimenA5,
-  ImpuestoA5,
-  PersonaA5,
-  WsAuth,
-} from './types.js';
+import type { ActividadA5, CategoriaA5, ErrorRegimenA5, ImpuestoA5, PersonaA5, WsAuth } from './types.js';
 
 export type PadronA5ClientConfig = PadronClientConfig;
+
+/** Máximo de claves por `getPersonaList_v2` (manual de constancia v4.1, §3.3). */
+export const MAX_PERSONA_LIST = 250;
 
 /**
  * Client for ws_sr_constancia_inscripcion (ex ws_sr_padron_a5, deprecado por
  * ARCA) - Constancia de inscripción: datos generales, domicilio fiscal,
  * impuestos del régimen general y monotributo.
  *
- * Usa `getPersona_v2`, el método vigente según el manual del servicio (v4.1).
+ * Usa `getPersona_v2` y `getPersonaList_v2`, los métodos vigentes según el
+ * manual del servicio (v4.1).
  */
 export class PadronA5Client extends BasePadronClient {
   /**
-   * Constancia de inscripción de un contribuyente.
-   * @param auth - Authentication object with Token, Sign, and CuitRepresentada
-   * @param cuit - CUIT of the taxpayer to query
-   * @param opts - Opciones por llamada (signal)
+   * Constancia de inscripción de un contribuyente (`getPersona_v2`).
+   *
+   * Si ARCA no puede emitir la constancia, devuelve la persona con
+   * `errorConstancia` / `errorRegimenGeneral` / `errorMonotributo`.
+   * @param cuit - CUIT a consultar (con o sin guiones; se valida el dígito verificador)
+   * @throws ArcaPadronServiceError si ARCA responde con un Fault de negocio (ej: CUIT inexistente)
    */
-  async getPersona(auth: WsAuth, cuit: string, opts?: CallOptions): Promise<PersonaA5> {
-    const result = await this.call('getPersona_v2', { ...this.authParams(auth), idPersona: cuit }, opts);
+  async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA5> {
+    const idPersona = validateCuit(cuit);
+    const result = await this.call('getPersona_v2', { ...this.authParams(auth), idPersona }, opts);
     return mapPersonaA5(result);
   }
-}
 
-function mapDomicilio(d: R | undefined): DomicilioA5 | undefined {
-  if (!d) return undefined;
-  return {
-    direccion: str(d['direccion']),
-    localidad: str(d['localidad']),
-    codPostal: str(d['codPostal']),
-    idProvincia: num(d['idProvincia']),
-    descripcionProvincia: str(d['descripcionProvincia']),
-    tipoDomicilio: str(d['tipoDomicilio']),
-    datoAdicional: str(d['datoAdicional']),
-    tipoDatoAdicional: str(d['tipoDatoAdicional']),
-  };
+  /**
+   * Constancias de hasta 250 contribuyentes en una llamada (`getPersonaList_v2`).
+   *
+   * Devuelve una persona por cada clave que informa ARCA. Las claves
+   * inexistentes vuelven con `errorConstancia` (ej: "No existe persona con ese
+   * Id") en lugar de hacer fallar toda la consulta.
+   */
+  async getPersonaList(auth: WsAuth, cuits: Array<string | number>, opts?: CallOptions): Promise<PersonaA5[]> {
+    if (!Array.isArray(cuits) || cuits.length === 0 || cuits.length > MAX_PERSONA_LIST) {
+      throw new ArcaValidationError(
+        `getPersonaList_v2 acepta entre 1 y ${MAX_PERSONA_LIST} CUITs (recibió ${Array.isArray(cuits) ? cuits.length : 0})`,
+        [{ field: 'cuits', message: `Entre 1 y ${MAX_PERSONA_LIST} CUITs`, value: Array.isArray(cuits) ? cuits.length : cuits }],
+        'cuits',
+      );
+    }
+    const idPersona = cuits.map((c) => validateCuit(c));
+    const result = await this.call('getPersonaList_v2', { ...this.authParams(auth), idPersona }, opts);
+    return list(result['persona']).map(mapPersonaA5);
+  }
 }
 
 function mapImpuesto(i: R): ImpuestoA5 {
   return {
-    idImpuesto: Number(i['idImpuesto'] ?? 0),
+    idImpuesto: reqNumber(i['idImpuesto'], 'impuesto.idImpuesto'),
     descripcionImpuesto: str(i['descripcionImpuesto']),
     estadoImpuesto: str(i['estadoImpuesto']),
     motivo: str(i['motivo']),
@@ -60,7 +76,7 @@ function mapImpuesto(i: R): ImpuestoA5 {
 
 function mapActividad(a: R): ActividadA5 {
   return {
-    idActividad: String(a['idActividad'] ?? ''),
+    idActividad: reqString(a['idActividad'], 'actividad.idActividad'),
     descripcionActividad: str(a['descripcionActividad']),
     nomenclador: num(a['nomenclador']),
     orden: num(a['orden']),
@@ -68,45 +84,52 @@ function mapActividad(a: R): ActividadA5 {
   };
 }
 
-function mapCategoria(c: R | undefined): CategoriaA5 | undefined {
+function mapCategoria(v: unknown): CategoriaA5 | undefined {
+  const c = record(v);
   if (!c) return undefined;
   return {
-    idCategoria: Number(c['idCategoria'] ?? 0),
+    idCategoria: reqNumber(c['idCategoria'], 'categoria.idCategoria'),
     descripcionCategoria: str(c['descripcionCategoria']),
     idImpuesto: num(c['idImpuesto']),
     periodo: num(c['periodo']),
   };
 }
 
-function mapErrorRegimen(e: R | undefined): ErrorRegimenA5 | undefined {
+function mapErrorRegimen(v: unknown): ErrorRegimenA5 | undefined {
+  const e = record(v);
   if (!e) return undefined;
-  return { error: ensureArray(e['error'] as unknown).map(String), mensaje: str(e['mensaje']) };
+  return { error: strings(e['error']), mensaje: str(e['mensaje']) };
 }
 
-/** Mapea `personaReturn` de `getPersona_v2`. */
+/** Mapea `personaReturn` de `getPersona_v2` o un `persona` de `getPersonaList_v2`. */
 export function mapPersonaA5(raw: R): PersonaA5 {
-  const g = (raw['datosGenerales'] ?? {}) as R;
-  const rg = raw['datosRegimenGeneral'] as R | undefined;
-  const mt = raw['datosMonotributo'] as R | undefined;
-  const ec = raw['errorConstancia'] as R | undefined;
+  const g = record(raw['datosGenerales']);
+  const rg = record(raw['datosRegimenGeneral']);
+  const mt = record(raw['datosMonotributo']);
+  const ec = record(raw['errorConstancia']);
+  const domicilioFiscal = record(g?.['domicilioFiscal']);
+
+  if (!g && !ec) {
+    throw new ArcaPadronError('Respuesta inválida de ARCA: la constancia no tiene datosGenerales ni errorConstancia');
+  }
 
   const persona: PersonaA5 = {
-    idPersona: String(g['idPersona'] ?? ec?.['idPersona'] ?? ''),
-    tipoPersona: str(g['tipoPersona']) as PersonaA5['tipoPersona'],
-    tipoClave: str(g['tipoClave']),
-    estadoClave: str(g['estadoClave']),
-    nombre: str(g['nombre'] ?? ec?.['nombre']),
-    apellido: str(g['apellido'] ?? ec?.['apellido']),
-    razonSocial: str(g['razonSocial']),
-    mesCierre: num(g['mesCierre']),
-    fechaContratoSocial: str(g['fechaContratoSocial']),
-    fechaFallecimiento: str(g['fechaFallecimiento']),
-    esSucesion: str(g['esSucesion']),
-    domicilioFiscal: mapDomicilio(g['domicilioFiscal'] as R | undefined),
+    idPersona: reqString(g?.['idPersona'] ?? ec?.['idPersona'], 'datosGenerales.idPersona'),
+    tipoPersona: str(g?.['tipoPersona']) as PersonaA5['tipoPersona'],
+    tipoClave: str(g?.['tipoClave']),
+    estadoClave: str(g?.['estadoClave']),
+    nombre: str(g?.['nombre'] ?? ec?.['nombre']),
+    apellido: str(g?.['apellido'] ?? ec?.['apellido']),
+    razonSocial: str(g?.['razonSocial']),
+    mesCierre: num(g?.['mesCierre']),
+    fechaContratoSocial: str(g?.['fechaContratoSocial']),
+    fechaFallecimiento: str(g?.['fechaFallecimiento']),
+    esSucesion: str(g?.['esSucesion']),
+    domicilioFiscal: domicilioFiscal ? mapDomicilio(domicilioFiscal) : undefined,
     impuestos: [],
   };
 
-  const dep = g['dependencia'] as R | undefined;
+  const dep = record(g?.['dependencia']);
   if (dep) {
     persona.dependencia = {
       idDependencia: num(dep['idDependencia']),
@@ -119,9 +142,9 @@ export function mapPersonaA5(raw: R): PersonaA5 {
     };
   }
 
-  if (g['caracterizacion'] !== undefined) {
+  if (g?.['caracterizacion'] !== undefined) {
     persona.caracterizacion = list(g['caracterizacion']).map((c) => ({
-      idCaracterizacion: Number(c['idCaracterizacion'] ?? 0),
+      idCaracterizacion: reqNumber(c['idCaracterizacion'], 'caracterizacion.idCaracterizacion'),
       descripcionCaracterizacion: str(c['descripcionCaracterizacion']),
       periodo: num(c['periodo']),
       fechaSolicitud: num(c['fechaSolicitud']),
@@ -133,40 +156,51 @@ export function mapPersonaA5(raw: R): PersonaA5 {
       impuestos: list(rg['impuesto']).map(mapImpuesto),
       actividades: list(rg['actividad']).map(mapActividad),
       regimenes: list(rg['regimen']).map((r) => ({
-        idRegimen: Number(r['idRegimen'] ?? 0),
+        idRegimen: reqNumber(r['idRegimen'], 'regimen.idRegimen'),
         descripcionRegimen: str(r['descripcionRegimen']),
         idImpuesto: num(r['idImpuesto']),
         periodo: num(r['periodo']),
         tipoRegimen: str(r['tipoRegimen']),
       })),
-      categoriaAutonomo: mapCategoria(rg['categoriaAutonomo'] as R | undefined),
+      categoriaAutonomo: mapCategoria(rg['categoriaAutonomo']),
     };
   }
 
   if (mt) {
-    const actividadMonotributista = mt['actividadMonotributista'] as R | undefined;
+    const actividadMonotributista = record(mt['actividadMonotributista']);
     persona.monotributo = {
       impuestos: list(mt['impuesto']).map(mapImpuesto),
       actividades: list(mt['actividad']).map(mapActividad),
       actividadMonotributista: actividadMonotributista ? mapActividad(actividadMonotributista) : undefined,
-      categoria: mapCategoria(mt['categoriaMonotributo'] as R | undefined),
+      categoria: mapCategoria(mt['categoriaMonotributo']),
     };
+    if (mt['componenteDeSociedad'] !== undefined) {
+      persona.monotributo.componenteDeSociedad = list(mt['componenteDeSociedad']).map((c) => ({
+        idPersonaAsociada: str(c['idPersonaAsociada']),
+        apellidoPersonaAsociada: str(c['apellidoPersonaAsociada']),
+        nombrePersonaAsociada: str(c['nombrePersonaAsociada']),
+        razonSocialPersonaAsociada: str(c['razonSocialPersonaAsociada']),
+        tipoComponente: str(c['tipoComponente']),
+        ffRelacion: str(c['ffRelacion']),
+        ffVencimiento: str(c['ffVencimiento']),
+      }));
+    }
   }
 
   persona.impuestos = [...(persona.regimenGeneral?.impuestos ?? []), ...(persona.monotributo?.impuestos ?? [])];
 
   if (ec) {
     persona.errorConstancia = {
-      error: ensureArray(ec['error'] as unknown).map(String),
+      error: strings(ec['error']),
       idPersona: str(ec['idPersona']),
       nombre: str(ec['nombre']),
       apellido: str(ec['apellido']),
     };
   }
-  persona.errorRegimenGeneral = mapErrorRegimen(raw['errorRegimenGeneral'] as R | undefined);
-  persona.errorMonotributo = mapErrorRegimen(raw['errorMonotributo'] as R | undefined);
-  if (!persona.errorRegimenGeneral) delete persona.errorRegimenGeneral;
-  if (!persona.errorMonotributo) delete persona.errorMonotributo;
+  const errorRegimenGeneral = mapErrorRegimen(raw['errorRegimenGeneral']);
+  if (errorRegimenGeneral) persona.errorRegimenGeneral = errorRegimenGeneral;
+  const errorMonotributo = mapErrorRegimen(raw['errorMonotributo']);
+  if (errorMonotributo) persona.errorMonotributo = errorMonotributo;
 
   return persona;
 }

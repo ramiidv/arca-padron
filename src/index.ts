@@ -1,3 +1,5 @@
+import { checkServiceErrors as commonCheckServiceErrors } from '@ramiidv/arca-common';
+
 // Main class
 export { ArcaPadron } from './arca-padron.js';
 
@@ -7,24 +9,24 @@ export { condicionIvaDesdePadron } from './condicion-iva.js';
 // Persistencia de tickets (desde arca-common)
 export { MemoryTicketStorage, FileTicketStorage } from '@ramiidv/arca-common';
 
-// Error classes (base from common, domain-specific local)
+// Error classes
 export {
   ArcaError,
   ArcaAuthError,
   ArcaTicketVigenteError,
   ArcaSoapError,
   ArcaServiceError,
-  ArcaPadronError,
-  ArcaPadronServiceError,
-} from './errors.js';
+  ArcaValidationError,
+} from '@ramiidv/arca-common';
+export { ArcaPadronError, ArcaPadronServiceError, type PadronErrorReason } from './errors.js';
 
 // Base class
-export { BasePadronClient, type PadronClientConfig } from './base-client.js';
+export { BasePadronClient, type PadronClientConfig, type PadronSoapOptions } from './base-client.js';
 
 // Low-level clients
-export { WsaaClient } from './wsaa.js';
-export type { WsaaClientConfig } from './wsaa.js';
-export { PadronA5Client, type PadronA5ClientConfig } from './padron-a5.js';
+export { WsaaClient } from '@ramiidv/arca-common';
+export type { WsaaClientConfig } from '@ramiidv/arca-common';
+export { PadronA5Client, MAX_PERSONA_LIST, type PadronA5ClientConfig } from './padron-a5.js';
 export { PadronA4Client, type PadronA4ClientConfig } from './padron-a4.js';
 export { PadronA13Client, type PadronA13ClientConfig } from './padron-a13.js';
 export { PadronA10Client, type PadronA10ClientConfig } from './padron-a10.js';
@@ -33,6 +35,8 @@ export { PadronA100Client, type PadronA100ClientConfig } from './padron-a100.js'
 // Types
 export type {
   ArcaPadronConfig,
+  PadronServicio,
+  PadronStatus,
   AccessTicket,
   TicketStorage,
   CallOptions,
@@ -62,6 +66,7 @@ export type {
   DomicilioA5,
   DependenciaA5,
   CaracterizacionA5,
+  ComponenteSociedadA5,
   ImpuestoA5,
   ActividadA5,
   CategoriaA5,
@@ -77,6 +82,7 @@ export type {
 export {
   ENDPOINTS,
   Provincia,
+  DocTipo,
   TipoDocumento,
   CondicionIva,
   TipoDomicilio,
@@ -87,4 +93,11 @@ export {
 } from './constants.js';
 
 // Utilities (from common)
-export { ensureArray, parseXml, buildXml, checkServiceErrors } from './soap-client.js';
+export { ensureArray, parseXml, buildXml } from '@ramiidv/arca-common';
+
+/**
+ * @deprecated Padrón no devuelve errores de negocio en el body (los informa
+ * como SOAP Fault, que el SDK ya convierte en `ArcaPadronServiceError`). Si lo
+ * necesitás para otro servicio, importalo de `@ramiidv/arca-common`.
+ */
+export const checkServiceErrors = commonCheckServiceErrors;

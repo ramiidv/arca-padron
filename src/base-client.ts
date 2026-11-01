@@ -1,6 +1,17 @@
-import { afipSoapCall } from './soap-client.js';
-import type { ArcaEvent, CallOptions, SoapCallOptions, ServerStatus } from '@ramiidv/arca-common';
+import { afipSoapCall, validateCuit } from '@ramiidv/arca-common';
+import type {
+  AfipSoapCallOptions,
+  ArcaEvent,
+  CallOptions,
+  ServerStatus,
+  SoapCallOptions,
+} from '@ramiidv/arca-common';
+import { toPadronError } from './errors.js';
+import { reqString } from './mapping.js';
 import type { WsAuth } from './types.js';
+
+/** Opciones de transporte que se pasan a cada llamada SOAP. */
+export type PadronSoapOptions = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
 
 /** Shared configuration for all Padrón service clients. */
 export interface PadronClientConfig {
@@ -8,25 +19,26 @@ export interface PadronClientConfig {
   endpoint: string;
   /** SOAP namespace */
   namespace: string;
-  /** SOAP call options (retries, timeout) */
-  soapOptions?: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs'>;
+  /** Opciones de transporte (timeout, reintentos, fetch, TLS legacy) */
+  soapOptions?: PadronSoapOptions;
   /** Optional event callback */
   onEvent?: (event: ArcaEvent) => void;
 }
 
 /**
- * Abstract base class for Padrón web service clients.
- * Provides shared constructor logic and health-check method.
+ * Base de los clientes de Padrón.
  *
  * Los WS de Padrón declaran los parámetros sin namespace
- * (`elementFormDefault="unqualified"`): `afipSoapCall` de arca-common prefija
- * el método y deja los parámetros sin namespace. Todas las consultas se
- * reintentan ante errores transitorios.
+ * (`elementFormDefault="unqualified"`) y `soapAction=""`: `afipSoapCall` de
+ * arca-common prefija el método y deja los parámetros sin namespace. Todas las
+ * operaciones son consultas: se reintentan ante errores transitorios (nunca
+ * ante un SOAP Fault). Los Faults de negocio conocidos (CUIT inexistente,
+ * clave inactiva, token no autorizado...) se lanzan como `ArcaPadronServiceError`.
  */
 export abstract class BasePadronClient {
   protected readonly endpoint: string;
   protected readonly namespace: string;
-  protected readonly soapOptions?: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs'>;
+  protected readonly soapOptions?: PadronSoapOptions;
   protected readonly onEvent?: (event: ArcaEvent) => void;
 
   constructor(config: PadronClientConfig) {
@@ -36,17 +48,24 @@ export abstract class BasePadronClient {
     this.onEvent = config.onEvent;
   }
 
-  /** Llama a un método del servicio. */
-  protected call(
+  /** Llama a un método del servicio y traduce los Faults de negocio. */
+  protected async call(
     method: string,
     params: Record<string, unknown>,
     opts?: CallOptions,
+    extra?: Pick<AfipSoapCallOptions, 'fetch'>,
   ): Promise<Record<string, unknown>> {
-    return afipSoapCall(this.endpoint, this.namespace, method, params, {
-      ...this.soapOptions,
-      onEvent: this.onEvent,
-      signal: opts?.signal,
-    });
+    try {
+      return await afipSoapCall(this.endpoint, this.namespace, method, params, {
+        ...this.soapOptions,
+        ...extra,
+        kind: 'consulta',
+        onEvent: this.onEvent,
+        signal: opts?.signal,
+      });
+    } catch (err) {
+      throw toPadronError(err, method);
+    }
   }
 
   /** Parámetros de autenticación en el orden del WSDL: token, sign, cuitRepresentada. */
@@ -54,18 +73,17 @@ export abstract class BasePadronClient {
     return {
       token: auth.Token,
       sign: auth.Sign,
-      cuitRepresentada: auth.CuitRepresentada,
+      cuitRepresentada: validateCuit(auth.CuitRepresentada),
     };
   }
 
   /** Health check for this service. */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
     const result = await this.call('dummy', {}, opts);
-
     return {
-      appserver: (result['appserver'] ?? '') as string,
-      dbserver: (result['dbserver'] ?? '') as string,
-      authserver: (result['authserver'] ?? '') as string,
+      appserver: reqString(result['appserver'], 'dummy.appserver'),
+      dbserver: reqString(result['dbserver'], 'dummy.dbserver'),
+      authserver: reqString(result['authserver'], 'dummy.authserver'),
     };
   }
 }

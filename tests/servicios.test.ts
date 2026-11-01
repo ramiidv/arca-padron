@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryTicketStorage, CondicionIva } from '@ramiidv/arca-common';
+import { ArcaSoapError, MemoryTicketStorage, CondicionIva } from '@ramiidv/arca-common';
 import { ArcaPadron } from '../src/arca-padron.js';
+import { mockFetch, padron, respuesta } from './helpers.js';
 import { condicionIvaDesdePadron } from '../src/condicion-iva.js';
 import { ENDPOINTS } from '../src/constants.js';
 
@@ -8,49 +9,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Respuesta con la forma que devuelve JAX-WS en Padrón: tag con prefijo y contenido sin namespace. */
-function respuesta(ns: string, method: string, inner: string): Response {
-  const xml =
-    '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>' +
-    `<ns2:${method}Response xmlns:ns2="${ns}">${inner}</ns2:${method}Response>` +
-    '</soap:Body></soap:Envelope>';
-  return new Response(xml, { headers: { 'content-type': 'text/xml' } });
-}
-
-function mockFetch(res: Response) {
-  const bodies: string[] = [];
-  const fn = vi.fn(async (_url: string, init: RequestInit) => {
-    bodies.push(String(init.body));
-    return res.clone();
-  });
-  vi.stubGlobal('fetch', fn);
-  return { fn, bodies };
-}
-
-async function padron(): Promise<ArcaPadron> {
-  const storage = new MemoryTicketStorage();
-  const client = new ArcaPadron({
-    cert: '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----',
-    key: 'KEY',
-    cuit: '20123456786',
-    ticketStorage: storage,
-  });
-  const expirationTime = new Date(Date.now() + 12 * 3_600_000).toISOString();
-  for (const svc of Object.values(ENDPOINTS)) {
-    if ('serviceId' in svc) {
-      await storage.set(client.wsaa.ticketKey(svc.serviceId), { token: 'TOKEN', sign: 'SIGN', expirationTime });
-    }
-  }
-  return client;
-}
-
 const CONSTANCIA_RI = `<personaReturn>
   <datosGenerales>
     <domicilioFiscal><codPostal>5000</codPostal><descripcionProvincia>CORDOBA</descripcionProvincia>
       <direccion>SAN MARTIN 100</direccion><idProvincia>3</idProvincia><localidad>CORDOBA</localidad>
       <tipoDomicilio>FISCAL</tipoDomicilio></domicilioFiscal>
-    <estadoClave>ACTIVO</estadoClave><idPersona>30712345674</idPersona><mesCierre>12</mesCierre>
+    <estadoClave>ACTIVO</estadoClave><idPersona>30712345671</idPersona><mesCierre>12</mesCierre>
     <razonSocial>RESTO SA</razonSocial><tipoClave>CUIT</tipoClave><tipoPersona>JURIDICA</tipoPersona>
   </datosGenerales>
   <datosRegimenGeneral>
@@ -86,19 +50,19 @@ describe('constancia de inscripción (ex A5)', () => {
   it('usa getPersona_v2, parámetros sin namespace y en orden del WSDL', async () => {
     const client = await padron();
     const { bodies } = mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_RI));
-    await client.getConstanciaInscripcion('30712345674');
+    await client.getConstanciaInscripcion('30712345671');
     expect(bodies[0]).toContain('<ser:getPersona_v2 xmlns:ser="http://a5.soap.ws.server.puc.sr/">');
     expect(bodies[0]).toMatch(
-      /<token>TOKEN<\/token>\s*<sign>SIGN<\/sign>\s*<cuitRepresentada>20123456786<\/cuitRepresentada>\s*<idPersona>30712345674<\/idPersona>/,
+      /<token>TOKEN<\/token>\s*<sign>SIGN<\/sign>\s*<cuitRepresentada>20123456786<\/cuitRepresentada>\s*<idPersona>30712345671<\/idPersona>/,
     );
   });
 
   it('mapea datos generales, domicilio fiscal, impuestos y actividades', async () => {
     const client = await padron();
     mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_RI));
-    const p = await client.getConstanciaInscripcion('30712345674');
+    const p = await client.getConstanciaInscripcion('30712345671');
     expect(p).toMatchObject({
-      idPersona: '30712345674',
+      idPersona: '30712345671',
       tipoPersona: 'JURIDICA',
       razonSocial: 'RESTO SA',
       mesCierre: 12,
@@ -149,7 +113,7 @@ describe('constancia de inscripción (ex A5)', () => {
     const client = await padron();
     mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_RI));
     const spy = vi.spyOn(client.wsaa, 'getAccessTicket');
-    await client.getConstanciaInscripcion('30712345674');
+    await client.getConstanciaInscripcion('30712345671');
     expect(spy).toHaveBeenCalledWith('ws_sr_constancia_inscripcion', expect.anything());
   });
 });
@@ -162,14 +126,14 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
         ENDPOINTS.a4.namespace,
         'getPersona',
         '<personaReturn><metadata><servidor>x</servidor></metadata><persona>' +
-          '<estadoClave>ACTIVO</estadoClave><idPersona>30712345674</idPersona><razonSocial>RESTO SA</razonSocial>' +
+          '<estadoClave>ACTIVO</estadoClave><idPersona>30712345671</idPersona><razonSocial>RESTO SA</razonSocial>' +
           '<tipoPersona>JURIDICA</tipoPersona>' +
           '<impuesto><descripcionImpuesto>IVA</descripcionImpuesto><estado>ACTIVO</estado><idImpuesto>30</idImpuesto><periodo>201311</periodo></impuesto>' +
           '</persona></personaReturn>',
       ),
     );
-    const p = await client.getPersona('30712345674');
-    expect(p.idPersona).toBe('30712345674');
+    const p = await client.getPersona('30712345671');
+    expect(p.idPersona).toBe('30712345671');
     expect(p.razonSocial).toBe('RESTO SA');
     expect(p.impuesto).toEqual([expect.objectContaining({ idImpuesto: 30, estado: 'ACTIVO' })]);
     expect(condicionIvaDesdePadron(p).condicionIva).toBe(CondicionIva.RESPONSABLE_INSCRIPTO);
@@ -216,11 +180,11 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
       respuesta(
         ENDPOINTS.a13.namespace,
         'getIdPersonaListByDocumento',
-        '<idPersonaListReturn><idPersona>20111111112</idPersona><idPersona>27111111115</idPersona>' +
+        '<idPersonaListReturn><idPersona>20111111112</idPersona><idPersona>27111111117</idPersona>' +
           '<metadata><servidor>x</servidor></metadata></idPersonaListReturn>',
       ),
     );
-    expect(await client.getIdPersonaListByDocumento('11111111')).toEqual(['20111111112', '27111111115']);
+    expect(await client.getIdPersonaListByDocumento('11111111')).toEqual(['20111111112', '27111111117']);
   });
 
   it('A100 desenvuelve parameterCollectionReturn (antes devolvía [])', async () => {
@@ -254,7 +218,10 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     });
     const { fn } = mockFetch(respuesta(ENDPOINTS.a13.namespace, 'getPersona', '<personaReturn/>'));
     controller.abort();
-    await expect(client.getPersonaA13('20111111112')).rejects.toThrow();
+    const err = await client.getPersonaA13('20111111112').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect((err as ArcaSoapError).aborted).toBe(true);
+    expect((err as ArcaSoapError).uncertain).toBe(false);
     expect(fn).not.toHaveBeenCalled();
   });
 });
